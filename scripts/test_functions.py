@@ -3,13 +3,10 @@ import torch
 from torchvision import transforms
 from PIL import Image
 import cv2
-import mediapipe as mp
 
-# MediaPipe stable version
-mp_face = mp.solutions.face_detection
-face_detector = mp_face.FaceDetection(
-    model_selection=0,
-    min_detection_confidence=0.5
+# تحميل face detector
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 )
 
 mask_file = None
@@ -47,33 +44,35 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model):
     return output_tensor.cpu()
 
 
-def detect_face_mediapipe(image):
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = face_detector.process(image_rgb)
+# ✅ Face detection بـ OpenCV
+def detect_face_opencv(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    if not results.detections:
+    faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=5,
+        minSize=(50, 50)
+    )
+
+    if len(faces) == 0:
         raise ValueError("No face found")
 
-    h, w, _ = image.shape
-    bbox = results.detections[0].location_data.relative_bounding_box
+    x, y, w, h = faces[0]
 
-    x = int(bbox.xmin * w)
-    y = int(bbox.ymin * h)
-    width = int(bbox.width * w)
-    height = int(bbox.height * h)
-
-    return (y, x + width, y + height, x)
+    return (y, x + w, y + h, x)
 
 
 def process_image(your_model, image, video, source_age, target_age=0,
                   window_size=512, stride=256):
 
     if video:
-        raise ValueError("Video processing not supported on Hugging Face")
+        raise ValueError("Video not supported on Hugging Face")
 
     image = np.array(image)
 
-    fl = detect_face_mediapipe(image)
+    # 🔥 detection هنا
+    fl = detect_face_opencv(image)
 
     margin_y_t = int((fl[2] - fl[0]) * 0.6)
     margin_y_b = int((fl[2] - fl[0]) * 0.4)
