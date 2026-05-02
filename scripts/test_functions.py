@@ -4,17 +4,13 @@ from torchvision import transforms
 from PIL import Image
 import cv2
 import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
 
-# إعداد Face Detector الجديد
-base_options = python.BaseOptions(model_asset_path=None)
-options = vision.FaceDetectorOptions(
-    base_options=base_options,
+# MediaPipe stable version
+mp_face = mp.solutions.face_detection
+face_detector = mp_face.FaceDetection(
+    model_selection=0,
     min_detection_confidence=0.5
 )
-
-detector = vision.FaceDetector.create_from_options(options)
 
 mask_file = None
 small_mask_file = None
@@ -53,19 +49,18 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model):
 
 def detect_face_mediapipe(image):
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
+    results = face_detector.process(image_rgb)
 
-    detection_result = detector.detect(mp_image)
-
-    if not detection_result.detections:
+    if not results.detections:
         raise ValueError("No face found")
 
-    bbox = detection_result.detections[0].bounding_box
+    h, w, _ = image.shape
+    bbox = results.detections[0].location_data.relative_bounding_box
 
-    x = int(bbox.origin_x)
-    y = int(bbox.origin_y)
-    width = int(bbox.width)
-    height = int(bbox.height)
+    x = int(bbox.xmin * w)
+    y = int(bbox.ymin * h)
+    width = int(bbox.width * w)
+    height = int(bbox.height * h)
 
     return (y, x + width, y + height, x)
 
@@ -74,13 +69,14 @@ def process_image(your_model, image, video, source_age, target_age=0,
                   window_size=512, stride=256):
 
     if video:
-        raise ValueError("Video not supported")
+        raise ValueError("Video processing not supported on Hugging Face")
 
     image = np.array(image)
+
     fl = detect_face_mediapipe(image)
 
-    margin_y_t = int((fl[2] - fl[0]) * .6)
-    margin_y_b = int((fl[2] - fl[0]) * .4)
+    margin_y_t = int((fl[2] - fl[0]) * 0.6)
+    margin_y_b = int((fl[2] - fl[0]) * 0.4)
     margin_x = int((fl[1] - fl[3]) * 0.5)
 
     l_y = max(fl[0] - margin_y_t, 0)
@@ -97,7 +93,10 @@ def process_image(your_model, image, video, source_age, target_age=0,
     source_age_channel = torch.full_like(cropped[:1], source_age / 100)
     target_age_channel = torch.full_like(cropped[:1], target_age / 100)
 
-    input_tensor = torch.cat([cropped, source_age_channel, target_age_channel], dim=0).unsqueeze(0)
+    input_tensor = torch.cat(
+        [cropped, source_age_channel, target_age_channel],
+        dim=0
+    ).unsqueeze(0)
 
     image_tensor = transforms.ToTensor()(image)
 
@@ -111,4 +110,4 @@ def process_image(your_model, image, video, source_age, target_age=0,
 
 
 def process_video(*args, **kwargs):
-    raise ValueError("Video not supported on HF")
+    raise ValueError("Video processing not supported on Hugging Face Spaces")
