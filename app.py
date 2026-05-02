@@ -17,7 +17,7 @@ MODEL_WEIGHTS = PROJECT_ROOT / "best_unet_model.pth"
 # ===== App =====
 app = FastAPI(title="Face Aging API", version="1.0")
 
-# CORS (للموبايل)
+# ===== CORS (للموبايل) =====
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,7 +43,7 @@ async def predict(
     source_age: int = Form(...),
     target_age: int = Form(...)
 ):
-    # Validate file
+    # ===== Validate image =====
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
@@ -53,16 +53,34 @@ async def predict(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
 
+    # ===== Inference =====
     try:
         result = predict_image(model, image, source_age, target_age)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
 
-    # 🔥 FIX: handle both cases (path أو PIL Image)
+    # ===== 🔥 Handle all cases =====
     if isinstance(result, str):
-        result = Image.open(result)
 
-    # Convert to base64
+        # 🟢 case: base64 string
+        if result.startswith("iVBOR") or len(result) > 1000:
+            try:
+                result = Image.open(io.BytesIO(base64.b64decode(result)))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Base64 decode failed: {e}")
+
+        # 🟢 case: file path
+        else:
+            try:
+                result = Image.open(result)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Image path invalid: {e}")
+
+    # 🟢 ensure it's PIL Image
+    if not isinstance(result, Image.Image):
+        raise HTTPException(status_code=500, detail="Output is not a valid image")
+
+    # ===== Convert to base64 =====
     buffered = io.BytesIO()
     result.save(buffered, format="PNG")
     img_str = base64.b64encode(buffered.getvalue()).decode()
@@ -70,7 +88,7 @@ async def predict(
     return {"image_base64": img_str}
 
 
-# ===== Run (مهم لـ HF) =====
+# ===== Run (HF Spaces يحتاج ده) =====
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
