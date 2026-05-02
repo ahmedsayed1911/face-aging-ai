@@ -1,11 +1,6 @@
 import numpy as np
-import os
 import torch
-from torch.autograd import Variable
 from torchvision import transforms
-import tempfile
-import subprocess
-from ffmpy import FFmpeg, FFprobe
 from PIL import Image
 import cv2
 import mediapipe as mp
@@ -75,7 +70,7 @@ def process_image(your_model, image, video, source_age, target_age=0,
                   window_size=512, stride=256, steps=18):
 
     if video:
-        raise ValueError("Video processing not supported in this environment")
+        raise ValueError("Video processing not supported on Hugging Face")
 
     input_size = (1024, 1024)
     image = np.array(image)
