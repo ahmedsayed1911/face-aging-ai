@@ -17,7 +17,7 @@ MODEL_WEIGHTS = PROJECT_ROOT / "best_unet_model.pth"
 # ===== App =====
 app = FastAPI(title="Face Aging API", version="1.0")
 
-# CORS (خليه مفتوح للموبايل)
+# CORS (للموبايل)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,7 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===== Load Model (مرة واحدة) =====
+# ===== Load Model =====
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 load_masks(ASSETS_DIR)
 model = load_model(MODEL_WEIGHTS, device)
@@ -58,6 +58,10 @@ async def predict(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
 
+    # 🔥 FIX: handle both cases (path أو PIL Image)
+    if isinstance(result, str):
+        result = Image.open(result)
+
     # Convert to base64
     buffered = io.BytesIO()
     result.save(buffered, format="PNG")
@@ -66,7 +70,7 @@ async def predict(
     return {"image_base64": img_str}
 
 
-# ===== Run (مهم لـ HF Spaces) =====
+# ===== Run (مهم لـ HF) =====
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
