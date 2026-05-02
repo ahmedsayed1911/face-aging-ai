@@ -1,11 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 import io
 import base64
 import torch
 from pathlib import Path
+import uuid
 
 from core.model_loader import load_model, load_masks
 from core.inference import predict_image
@@ -14,11 +16,17 @@ from core.inference import predict_image
 PROJECT_ROOT = Path(__file__).parent
 ASSETS_DIR = PROJECT_ROOT / "assets"
 MODEL_WEIGHTS = PROJECT_ROOT / "best_unet_model.pth"
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
+
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 # ===== App =====
-app = FastAPI(title="Face Aging API", version="2.0")
+app = FastAPI(title="Face Aging API", version="3.0")
 
-# ===== CORS =====
+# serve images
+app.mount("/images", StaticFiles(directory=str(OUTPUT_DIR)), name="images")
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===== Load Model =====
+# load model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 load_masks(ASSETS_DIR)
 model = load_model(MODEL_WEIGHTS, device)
@@ -35,7 +43,7 @@ model = load_model(MODEL_WEIGHTS, device)
 
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "Face Aging API is running 🚀"}
+    return {"status": "ok"}
 
 
 @app.post("/predict")
@@ -44,45 +52,33 @@ async def predict(
     source_age: int = Form(...),
     target_age: int = Form(...)
 ):
-    # ===== Validate =====
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be image")
 
-    try:
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-    # ===== Inference =====
-    try:
-        result = predict_image(model, image, source_age, target_age)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
+    result = predict_image(model, image, source_age, target_age)
 
-    # ===== Handle كل الحالات =====
+    # handle result
     if isinstance(result, str):
-
-        # base64
         if result.startswith("iVBOR") or len(result) > 1000:
             result = Image.open(io.BytesIO(base64.b64decode(result)))
-
-        # path
         else:
             result = Image.open(result)
 
-    if not isinstance(result, Image.Image):
-        raise HTTPException(status_code=500, detail="Output is not a valid image")
+    # save image
+    filename = f"{uuid.uuid4()}.png"
+    filepath = OUTPUT_DIR / filename
+    result.save(filepath)
 
-    # ===== Return image مباشرة =====
-    buffered = io.BytesIO()
-    result.save(buffered, format="PNG")
-    buffered.seek(0)
-
-    return StreamingResponse(buffered, media_type="image/png")
+    # return URL
+    return {
+        "image_url": f"/images/{filename}"
+    }
 
 
-# ===== Run =====
+# run
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
