@@ -5,5 +5,5 @@ pillow
 numpy
 antialiased-cnns
 python-multipart
-mediapipe
+mediapipe==0.10.9
 opencv-python-headless
