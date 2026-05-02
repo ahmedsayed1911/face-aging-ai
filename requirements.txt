@@ -5,3 +5,4 @@ pillow
 numpy
 antialiased-cnns
 python-multipart
+face_recognition
