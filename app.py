@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from PIL import Image
 import io
 import base64
@@ -15,9 +16,9 @@ ASSETS_DIR = PROJECT_ROOT / "assets"
 MODEL_WEIGHTS = PROJECT_ROOT / "best_unet_model.pth"
 
 # ===== App =====
-app = FastAPI(title="Face Aging API", version="1.0")
+app = FastAPI(title="Face Aging API", version="2.0")
 
-# ===== CORS (للموبايل) =====
+# ===== CORS =====
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,7 +44,7 @@ async def predict(
     source_age: int = Form(...),
     target_age: int = Form(...)
 ):
-    # ===== Validate image =====
+    # ===== Validate =====
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
@@ -59,36 +60,29 @@ async def predict(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
 
-    # ===== 🔥 Handle all cases =====
+    # ===== Handle كل الحالات =====
     if isinstance(result, str):
 
-        # 🟢 case: base64 string
+        # base64
         if result.startswith("iVBOR") or len(result) > 1000:
-            try:
-                result = Image.open(io.BytesIO(base64.b64decode(result)))
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Base64 decode failed: {e}")
+            result = Image.open(io.BytesIO(base64.b64decode(result)))
 
-        # 🟢 case: file path
+        # path
         else:
-            try:
-                result = Image.open(result)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Image path invalid: {e}")
+            result = Image.open(result)
 
-    # 🟢 ensure it's PIL Image
     if not isinstance(result, Image.Image):
         raise HTTPException(status_code=500, detail="Output is not a valid image")
 
-    # ===== Convert to base64 =====
+    # ===== Return image مباشرة =====
     buffered = io.BytesIO()
     result.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
+    buffered.seek(0)
 
-    return {"image_base64": img_str}
+    return StreamingResponse(buffered, media_type="image/png")
 
 
-# ===== Run (HF Spaces يحتاج ده) =====
+# ===== Run =====
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
