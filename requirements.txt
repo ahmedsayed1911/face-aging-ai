@@ -5,4 +5,5 @@ pillow
 numpy
 antialiased-cnns
 python-multipart
-face_recognition
+mediapipe
+opencv-python-headless
