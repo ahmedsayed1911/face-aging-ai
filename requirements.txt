@@ -1,10 +1,9 @@
-gradio
+fastapi
+uvicorn
 torch
 torchvision
 pillow
 numpy
 antialiased-cnns
 python-multipart
-fastapi
-uvicorn
 opencv-python-headless
