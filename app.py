@@ -1,6 +1,5 @@
 import gradio as gr
 import torch
-from PIL import Image
 from pathlib import Path
 
 from core.model_loader import load_model, load_masks
@@ -16,20 +15,23 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 load_masks(ASSETS_DIR)
 model = load_model(MODEL_WEIGHTS, device)
 
+
 def inference_fn(image, source_age, target_age):
-    result_path = predict_image(model, image, source_age, target_age)
-    return Image.open(result_path)
+    # 🔥 بيرجع PIL Image مباشرة
+    result = predict_image(model, image, source_age, target_age)
+    return result
+
 
 demo = gr.Interface(
     fn=inference_fn,
     inputs=[
-        gr.Image(type="pil"),
+        gr.Image(type="pil", label="Upload Face Image"),
         gr.Slider(10, 90, value=25, label="Source Age"),
         gr.Slider(10, 90, value=60, label="Target Age"),
     ],
-    outputs=gr.Image(type="pil"),
+    outputs=gr.Image(type="pil", label="Result"),
     title="Face Aging AI",
-    description="Upload a face and change its age",
+    description="Upload a face image and change its age using AI",
 )
 
 demo.launch()
