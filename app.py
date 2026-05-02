@@ -1,4 +1,5 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import io
 import base64
@@ -8,17 +9,32 @@ from pathlib import Path
 from core.model_loader import load_model, load_masks
 from core.inference import predict_image
 
-# paths
+# ===== Paths =====
 PROJECT_ROOT = Path(__file__).parent
 ASSETS_DIR = PROJECT_ROOT / "assets"
 MODEL_WEIGHTS = PROJECT_ROOT / "best_unet_model.pth"
 
-# load model
+# ===== App =====
+app = FastAPI(title="Face Aging API", version="1.0")
+
+# CORS (خليه مفتوح للموبايل)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ===== Load Model (مرة واحدة) =====
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 load_masks(ASSETS_DIR)
 model = load_model(MODEL_WEIGHTS, device)
 
-app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Face Aging API is running 🚀"}
 
 
 @app.post("/predict")
@@ -27,15 +43,30 @@ async def predict(
     source_age: int = Form(...),
     target_age: int = Form(...)
 ):
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents)).convert("RGB")
+    # Validate file
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
 
-    result = predict_image(model, image, source_age, target_age)
+    try:
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
 
+    try:
+        result = predict_image(model, image, source_age, target_age)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
+
+    # Convert to base64
     buffered = io.BytesIO()
     result.save(buffered, format="PNG")
     img_str = base64.b64encode(buffered.getvalue()).decode()
 
-    return {
-        "image_base64": img_str
-    }
+    return {"image_base64": img_str}
+
+
+# ===== Run (مهم لـ HF Spaces) =====
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)
