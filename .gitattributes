@@ -51,4 +51,3 @@ assets/gradio_example_images/5.png filter=lfs diff=lfs merge=lfs -text
 assets/gradio_example_images/6.png filter=lfs diff=lfs merge=lfs -text
 assets/gradio_example_images/orig.mp4 filter=lfs diff=lfs merge=lfs -text
 assets/mask1024.jpg filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
